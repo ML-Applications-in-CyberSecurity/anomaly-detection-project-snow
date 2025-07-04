@@ -3,6 +3,13 @@ import json
 import pandas as pd
 import joblib
 import requests
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+
+import matplotlib
+
+matplotlib.use('TkAgg')  # یا Agg اگر فقط ذخیره می‌خوای
 
 HOST = 'localhost'
 PORT = 9999
@@ -59,6 +66,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     buffer = ""
     print("Client connected to server.\n")
 
+    all_data = []  # لیست همه ویژگی‌ها
+    all_labels = []  # لیست برچسب‌ها (1=normal, -1=anomaly)
+
     while True:
         chunk = s.recv(1024).decode()
         if not chunk:
@@ -74,6 +84,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 processed = pre_process_data(data)
                 prediction = model.predict(processed)[0]
 
+                all_data.append(processed.iloc[0].tolist())  # یک ردیف به صورت لیست
+                all_labels.append(prediction)
+
                 if prediction == -1:
                     label = describe_anomaly_with_llm(data)
                     print(f"\n🚨 Anomaly Detected!\nLabel & Reason: {label}\n")
@@ -82,3 +95,31 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
+
+            if len(all_data) % 50 == 0:
+                try:
+                    df_viz = pd.DataFrame(all_data, columns=processed.columns)
+                    df_viz['label'] = all_labels
+
+                    # اعمال PCA
+                    pca = PCA(n_components=2)
+                    pca_result = pca.fit_transform(df_viz.drop(columns=['label']))
+
+                    df_viz['PC1'] = pca_result[:, 0]
+                    df_viz['PC2'] = pca_result[:, 1]
+                    df_viz['label'] = df_viz['label'].map({1: "normal", -1: "anomaly"})
+
+                    # ترسیم
+                    plt.figure(figsize=(8, 5))
+                    sns.scatterplot(data=df_viz, x="PC1", y="PC2", hue="label",
+                                    palette={"normal": "green", "anomaly": "red"})
+                    plt.title("Live PCA Visualization of Sensor Data")
+                    plt.xlabel("Principal Component 1")
+                    plt.ylabel("Principal Component 2")
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.savefig(f"visualization_{len(all_data)}.png")
+                    plt.close()
+
+                except Exception as e:
+                    print(f"📉 Visualization error: {e}")
