@@ -10,6 +10,7 @@ COMMON_PORTS = [80, 443, 22, 8080]
 SUSPICIOUS_PORTS = [1337, 9999, 6666]
 PROTOCOLS = ["TCP", "UDP", "ICMP", "UNKNOWN"]
 
+
 def generate_normal_data():
     return {
         "src_port": random.choice(COMMON_PORTS),
@@ -18,6 +19,7 @@ def generate_normal_data():
         "duration_ms": random.randint(50, 500),
         "protocol": random.choice(["TCP", "UDP"])
     }
+
 
 def generate_anomaly_data():
     anomaly_type = random.choice(["port", "packet", "duration", "protocol"])
@@ -54,8 +56,10 @@ def generate_anomaly_data():
             "protocol": "UNKNOWN"
         }
 
+
 def get_data():
     return generate_anomaly_data() if random.random() < 0.2 else generate_normal_data()
+
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((HOST, PORT))
