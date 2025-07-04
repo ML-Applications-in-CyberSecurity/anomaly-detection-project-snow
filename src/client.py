@@ -6,7 +6,6 @@ import requests
 import csv
 import os
 
-
 HOST = 'localhost'
 PORT = 9999
 
@@ -19,7 +18,8 @@ CSV_FILE = "anomalies_log.csv"
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(["src_port", "dst_port", "packet_size", "duration_ms", "protocol", "llm_explanation"])
+        writer.writerow(
+            ["src_port", "dst_port", "packet_size", "duration_ms", "protocol", "confidence_score", "llm_explanation"])
 
 
 def pre_process_data(data):
@@ -85,10 +85,13 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
                 processed = pre_process_data(data)
                 prediction = model.predict(processed)[0]
+                score = model.decision_function(processed)[0]  # confidence score
 
                 if prediction == -1:
                     label = describe_anomaly_with_llm(data)
-                    print(f"\n🚨 Anomaly Detected!\nLabel & Reason: {label}\n")
+                    print(f"\n🚨 Anomaly Detected!")
+                    print(f"Confidence Score: {score:.4f}")
+                    print(f"Label & Reason: {label}\n")
                     # ذخیره ناهنجاری در فایل CSV
                     with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as file:
                         writer = csv.writer(file)
@@ -98,10 +101,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                             data["packet_size"],
                             data["duration_ms"],
                             data["protocol"],
-                            label.strip().replace('\n', ' ')  # توضیح مدل، تمیز شده برای CSV
+                            score,
+                            label.strip().replace('\n', ' '),
                         ])
                 else:
-                    print("✅ Normal data.\n")
+                    print(f"✅ Normal data. Confidence Score: {score:.4f}\n")
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
