@@ -3,11 +3,23 @@ import json
 import pandas as pd
 import joblib
 import requests
+import csv
+import os
+
 
 HOST = 'localhost'
 PORT = 9999
 
 model = joblib.load("anomaly_model.joblib")
+
+# مسیر فایل CSV خروجی
+CSV_FILE = "anomalies_log.csv"
+
+# اگر فایل وجود ندارد، هدر آن را بنویس
+if not os.path.exists(CSV_FILE):
+    with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(["src_port", "dst_port", "packet_size", "duration_ms", "protocol", "llm_explanation"])
 
 
 def pre_process_data(data):
@@ -77,6 +89,17 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 if prediction == -1:
                     label = describe_anomaly_with_llm(data)
                     print(f"\n🚨 Anomaly Detected!\nLabel & Reason: {label}\n")
+                    # ذخیره ناهنجاری در فایل CSV
+                    with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as file:
+                        writer = csv.writer(file)
+                        writer.writerow([
+                            data["src_port"],
+                            data["dst_port"],
+                            data["packet_size"],
+                            data["duration_ms"],
+                            data["protocol"],
+                            label.strip().replace('\n', ' ')  # توضیح مدل، تمیز شده برای CSV
+                        ])
                 else:
                     print("✅ Normal data.\n")
 
