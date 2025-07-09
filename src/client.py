@@ -5,16 +5,30 @@ import joblib
 import requests
 import csv
 import os
+import random
 
 HOST = 'localhost'
 PORT = 9999
 
+LLM_PROMPT_TEMPLATES = [
+    {
+        "system": "You are a network security expert. Provide a concise label and the most probable cause for network anomalies based on sensor data.",
+        "user": "Sensor data: {data}\nWhat kind of anomaly is this? What is its most likely cause? Be brief and to the point."
+    },
+    {
+        "system": "You are an AI assistant specialized in IoT sensor anomaly detection. Analyze the provided sensor reading.",
+        "user": "Sensor reading: {data}\nIdentify the anomaly type and elaborate on its potential root causes."
+    },
+    {
+        "system": "You are a helpful assistant that labels sensor anomalies.",
+        "user": "Sensor reading: {data}\nDescribe the type of anomaly and suggest a possible cause."
+    }
+]
+
 model = joblib.load("anomaly_model.joblib")
 
-# مسیر فایل CSV خروجی
 CSV_FILE = "anomalies_log.csv"
 
-# اگر فایل وجود ندارد، هدر آن را بنویس
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -36,12 +50,15 @@ def describe_anomaly_with_llm(data):
         "Content-Type": "application/json"
     }
 
+    selected_template = random.choice(LLM_PROMPT_TEMPLATES)
+    system_message = selected_template["system"]
+    user_message = selected_template["user"].format(data=data)
+
     payload = {
-        "model": "mistralai/Mistral-7B-Instruct-v0.1",  # ✅ مدل قابل استفاده برای اکانت‌های رایگان
+        "model": "mistralai/Mistral-7B-Instruct-v0.1",
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant that labels sensor anomalies."},
-            {"role": "user",
-             "content": f"Sensor reading: {data}\nDescribe the type of anomaly and suggest a possible cause."}
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
         ],
         "temperature": 0.7,
         "top_p": 0.7,
@@ -92,7 +109,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     print(f"\n🚨 Anomaly Detected!")
                     print(f"Confidence Score: {score:.4f}")
                     print(f"Label & Reason: {label}\n")
-                    # ذخیره ناهنجاری در فایل CSV
+
                     with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as file:
                         writer = csv.writer(file)
                         writer.writerow([
