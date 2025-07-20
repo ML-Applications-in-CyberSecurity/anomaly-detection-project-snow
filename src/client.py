@@ -26,6 +26,8 @@ LLM_PROMPT_TEMPLATES = [
 ]
 
 model = joblib.load("anomaly_model.joblib")
+scaler = joblib.load("scaler.joblib")
+
 
 CSV_FILE = "anomalies_log.csv"
 
@@ -88,6 +90,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     buffer = ""
     print("Client connected to server.\n")
 
+    print("📡 Listening for data... Press Ctrl+C to stop.\n")
     while True:
         chunk = s.recv(1024).decode()
         if not chunk:
@@ -101,8 +104,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 print(f'Data Received:\n{data}\n')
 
                 processed = pre_process_data(data)
-                prediction = model.predict(processed)[0]
-                score = model.decision_function(processed)[0]  # confidence score
+                scaled_array = scaler.transform(processed)
+                scaled = pd.DataFrame(scaled_array, columns=processed.columns)
+
+                prediction = model.predict(scaled)[0]
+                score = model.decision_function(scaled)[0]  # confidence score
 
                 if prediction == -1:
                     label = describe_anomaly_with_llm(data)
@@ -126,3 +132,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
+
+    print("🔌 Client disconnected. Bye!")
