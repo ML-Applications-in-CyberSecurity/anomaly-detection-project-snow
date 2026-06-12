@@ -5,16 +5,32 @@ import joblib
 import requests
 import csv
 import os
+import random
 
 HOST = 'localhost'
 PORT = 9999
 
-model = joblib.load("anomaly_model.joblib")
+LLM_PROMPT_TEMPLATES = [
+    {
+        "system": "You are a network security expert. Provide a concise label and the most probable cause for network anomalies based on sensor data.",
+        "user": "Sensor data: {data}\nWhat kind of anomaly is this? What is its most likely cause? Be brief and to the point."
+    },
+    {
+        "system": "You are an AI assistant specialized in IoT sensor anomaly detection. Analyze the provided sensor reading.",
+        "user": "Sensor reading: {data}\nIdentify the anomaly type and elaborate on its potential root causes."
+    },
+    {
+        "system": "You are a helpful assistant that labels sensor anomalies.",
+        "user": "Sensor reading: {data}\nDescribe the type of anomaly and suggest a possible cause."
+    }
+]
 
-# مسیر فایل CSV خروجی
+model = joblib.load("anomaly_model.joblib")
+scaler = joblib.load("scaler.joblib")
+
+
 CSV_FILE = "anomalies_log.csv"
 
-# اگر فایل وجود ندارد، هدر آن را بنویس
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -36,12 +52,15 @@ def describe_anomaly_with_llm(data):
         "Content-Type": "application/json"
     }
 
+    selected_template = random.choice(LLM_PROMPT_TEMPLATES)
+    system_message = selected_template["system"]
+    user_message = selected_template["user"].format(data=data)
+
     payload = {
-        "model": "mistralai/Mistral-7B-Instruct-v0.1",  # ✅ مدل قابل استفاده برای اکانت‌های رایگان
+        "model": "mistralai/Mistral-7B-Instruct-v0.1",
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant that labels sensor anomalies."},
-            {"role": "user",
-             "content": f"Sensor reading: {data}\nDescribe the type of anomaly and suggest a possible cause."}
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
         ],
         "temperature": 0.7,
         "top_p": 0.7,
@@ -71,6 +90,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     buffer = ""
     print("Client connected to server.\n")
 
+    print("📡 Listening for data... Press Ctrl+C to stop.\n")
     while True:
         chunk = s.recv(1024).decode()
         if not chunk:
@@ -84,15 +104,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 print(f'Data Received:\n{data}\n')
 
                 processed = pre_process_data(data)
-                prediction = model.predict(processed)[0]
-                score = model.decision_function(processed)[0]  # confidence score
+                scaled_array = scaler.transform(processed)
+                scaled = pd.DataFrame(scaled_array, columns=processed.columns)
+
+                prediction = model.predict(scaled)[0]
+                score = model.decision_function(scaled)[0]  # confidence score
 
                 if prediction == -1:
                     label = describe_anomaly_with_llm(data)
                     print(f"\n🚨 Anomaly Detected!")
                     print(f"Confidence Score: {score:.4f}")
                     print(f"Label & Reason: {label}\n")
-                    # ذخیره ناهنجاری در فایل CSV
+
                     with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as file:
                         writer = csv.writer(file)
                         writer.writerow([
@@ -109,3 +132,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
+
+    print("🔌 Client disconnected. Bye!")
